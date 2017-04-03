@@ -1,0 +1,67 @@
+version: '2'
+
+services:
+  server:
+    image: shipperizer/jubilant-system:latest
+    build: .
+    command: make server
+    restart: always
+    environment:
+      - VIRTUAL_HOST=*
+      - BROKER_URL=rabbitmq
+    links:
+      - rabbitmq:rabbitmq
+    depends_on:
+      - server-worker
+    ports:
+      - 8888
+
+  lb:
+    image: dockercloud/haproxy:1.6.4
+    restart: always
+    links:
+      - server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 80:8888
+      - 11936:1936
+
+  server-worker:
+    image: shipperizer/jubilant-system:latest
+    build: .
+    command: make celery
+    restart: always
+    environment:
+      - BROKER_URL=rabbitmq
+    links:
+      - rabbitmq:rabbitmq
+    depends_on:
+      - rabbitmq
+
+  nginx:
+    image: nginx:stable-alpine
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./server/cert.pem:/tmp/server/cert.pem
+      - ./server/key.pem:/tmp/server/key.pem
+    ports:
+      - 10443:443
+    depends_on:
+      - lb
+    links:
+      - lb:lb
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: always
+    ports:
+      - 5671:5671
+      - 5672:5672
+      - 15671:15671
+      - 15672:15672
+    hostname: rabbit
+    environment:
+      - RABBITMQ_DEFAULT_USER=rabbit
+      - RABBITMQ_DEFAULT_PASS=rabbit
